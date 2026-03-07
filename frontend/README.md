@@ -1,16 +1,28 @@
-# React + Vite
+Sequnce Diagram
+![alt text](<my_finance sequenceDiagram-1.png>)
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
 
-Currently, two official plugins are available:
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+Clone the Repository
+git clone https://github.com/your-username/my_finance.git
+cd my_finance
 
-## React Compiler
+Backend Setup (Django)
+        Activate Virtual Environment
+        Windows
+            venv\Scripts\activate
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+        cd backend
+        pip install -r requirements.txt
 
-## Expanding the ESLint configuration
+        python manage.py makemigrations
+        python manage.py migrate
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+        python manage.py runserver
+
+Frontend
+        cd frontend
+        npm install
+        npm run dev
+
+    
