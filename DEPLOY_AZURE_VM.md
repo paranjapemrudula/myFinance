@@ -31,17 +31,15 @@ icacls "C:\path\to\my-virtual-machine-key.pem" /grant:r "%USERNAME%:R"
 ```bash
 sudo apt update
 sudo apt install -y python3 python3-venv python3-pip nginx nodejs npm git
-sudo mkdir -p /var/www
-sudo chown $USER:$USER /var/www
-cd /var/www
-git clone YOUR_GITHUB_REPO_URL my_finance
-cd my_finance
+cd ~
+git clone YOUR_GITHUB_REPO_URL myFinance
+cd ~/myFinance
 ```
 
 ## 4. Backend setup
 
 ```bash
-cd /var/www/my_finance
+cd ~/myFinance
 python3 -m venv .venv
 source .venv/bin/activate
 pip install --upgrade pip
@@ -57,11 +55,12 @@ Set these values in `backend/.env`:
 - `DJANGO_ALLOWED_HOSTS`: your VM public IP and later your domain
 - `DJANGO_CORS_ALLOWED_ORIGINS`: frontend URL
 - `DJANGO_CSRF_TRUSTED_ORIGINS`: frontend URL
+- `DJANGO_DB_NAME=/home/azureuser/myFinance/backend/db.sqlite3`
 
 Then run:
 
 ```bash
-cd /var/www/my_finance/backend
+cd ~/myFinance/backend
 ../.venv/bin/python manage.py migrate
 ../.venv/bin/python manage.py collectstatic --noinput
 ../.venv/bin/python manage.py createsuperuser
@@ -70,7 +69,7 @@ cd /var/www/my_finance/backend
 ## 5. Frontend setup
 
 ```bash
-cd /var/www/my_finance/frontend
+cd ~/myFinance/frontend
 cp .env.production.example .env.production
 nano .env.production
 ```
@@ -78,7 +77,7 @@ nano .env.production
 Set:
 
 ```env
-VITE_API_BASE_URL=http://YOUR_VM_PUBLIC_IP/api
+VITE_API_BASE_URL=http://YOUR_VM_PUBLIC_IP
 ```
 
 Build it:
@@ -91,7 +90,7 @@ npm run build
 ## 6. Gunicorn service
 
 ```bash
-sudo cp /var/www/my_finance/deploy/gunicorn/my_finance.service /etc/systemd/system/
+sudo cp ~/myFinance/deploy/gunicorn/my_finance.service /etc/systemd/system/
 sudo nano /etc/systemd/system/my_finance.service
 ```
 
@@ -109,11 +108,11 @@ sudo systemctl status my_finance
 ## 7. Nginx setup
 
 ```bash
-sudo cp /var/www/my_finance/deploy/nginx/my_finance.conf /etc/nginx/sites-available/my_finance
+sudo cp ~/myFinance/deploy/nginx/my_finance.conf /etc/nginx/sites-available/my_finance
 sudo nano /etc/nginx/sites-available/my_finance
 ```
 
-Replace `YOUR_VM_PUBLIC_IP` and `YOUR_DOMAIN`.
+Replace the `server_name` if your public IP changes or if you later add a domain.
 
 Enable the site:
 
@@ -130,7 +129,7 @@ The repo includes a `deploy.sh` script for repeat deployments.
 On the VM:
 
 ```bash
-cd /var/www/my_finance
+cd ~/myFinance
 chmod +x deploy.sh
 ./deploy.sh
 ```
@@ -179,7 +178,7 @@ After you change code locally:
 3. Run:
 
 ```bash
-cd /var/www/my_finance
+cd ~/myFinance
 git pull origin main
 ./deploy.sh
 ```

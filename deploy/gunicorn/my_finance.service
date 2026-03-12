@@ -5,9 +5,9 @@ After=network.target
 [Service]
 User=azureuser
 Group=www-data
-WorkingDirectory=/var/www/my_finance/backend
-EnvironmentFile=/var/www/my_finance/backend/.env
-ExecStart=/var/www/my_finance/.venv/bin/gunicorn config.wsgi:application --bind 127.0.0.1:8000 --workers 3
+WorkingDirectory=/home/azureuser/myFinance/backend
+EnvironmentFile=/home/azureuser/myFinance/backend/.env
+ExecStart=/home/azureuser/myFinance/.venv/bin/gunicorn config.wsgi:application --bind 127.0.0.1:8000 --workers 3
 Restart=always
 
 [Install]
