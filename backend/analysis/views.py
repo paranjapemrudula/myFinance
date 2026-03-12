@@ -1,12 +1,17 @@
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from rest_framework.permissions import AllowAny
 
 from .services import (
+    build_crypto_forecast_payload,
+    build_crypto_live_payload,
+    build_crypto_regression_payload,
     build_metal_prediction_payload,
     build_metals_correlation_payload,
     build_metals_live_payload,
     build_clustering_payload,
     build_discount_payload,
+    get_crypto_suggestions,
     build_regression_payload,
     normalize_timeframe,
     resolve_timeframe,
@@ -104,4 +109,46 @@ class MetalsPredictionView(APIView):
         payload = build_metal_prediction_payload(metal=metal, timeframe=timeframe)
         if payload is None:
             return Response({'detail': 'Unable to generate metal prediction.'}, status=404)
+        return Response(payload)
+
+
+class CryptoSuggestionView(APIView):
+    permission_classes = [AllowAny]
+
+    def get(self, request):
+        query = request.query_params.get('q', '')
+        return Response(get_crypto_suggestions(query=query))
+
+
+class CryptoLiveView(APIView):
+    permission_classes = [AllowAny]
+
+    def get(self, request):
+        symbol = request.query_params.get('symbol', 'BTC-USD').upper()
+        payload = build_crypto_live_payload(symbol=symbol)
+        if payload is None:
+            return Response({'detail': 'Unable to fetch crypto live data.'}, status=404)
+        return Response(payload)
+
+
+class CryptoRegressionView(APIView):
+    permission_classes = [AllowAny]
+
+    def get(self, request):
+        symbol = request.query_params.get('symbol', 'BTC-USD').upper()
+        payload = build_crypto_regression_payload(symbol=symbol)
+        if payload is None:
+            return Response({'detail': 'Unable to generate crypto regression analysis.'}, status=404)
+        return Response(payload)
+
+
+class CryptoForecastView(APIView):
+    permission_classes = [AllowAny]
+
+    def get(self, request):
+        symbol = request.query_params.get('symbol', 'BTC-USD').upper()
+        model_name = request.query_params.get('model', 'arima').lower()
+        payload = build_crypto_forecast_payload(symbol=symbol, model_name=model_name)
+        if payload is None:
+            return Response({'detail': 'Unable to generate crypto forecast.'}, status=404)
         return Response(payload)

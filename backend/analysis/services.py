@@ -4,11 +4,19 @@ import yfinance as yf
 from django.conf import settings
 from django.core.cache import cache
 from sklearn.cluster import KMeans
-from sklearn.linear_model import LinearRegression
-from sklearn.preprocessing import StandardScaler
+from sklearn.linear_model import LinearRegression, LogisticRegression
+from sklearn.preprocessing import MinMaxScaler, StandardScaler
 
 GOLD_SYMBOL = 'GC=F'
 SILVER_SYMBOL = 'SI=F'
+BTC_SYMBOL = 'BTC-USD'
+CRYPTO_SUGGESTIONS = [
+    {
+        'symbol': BTC_SYMBOL,
+        'name': 'Bitcoin / US Dollar',
+        'aliases': ['bitcoin', 'btc', 'btc usd', 'bitcoin usd', 'btc-usd'],
+    }
+]
 
 
 def normalize_timeframe(timeframe: str):
@@ -374,4 +382,217 @@ def build_metal_prediction_payload(metal: str = 'gold', timeframe: str = '1D'):
         'actual_price': np.round(y, 2).tolist() + [None] * len(future_labels),
         'predicted_price': np.round(np.concatenate([pred_hist, pred_future]), 2).tolist(),
         'outlook': direction,
+    }
+
+
+def get_crypto_suggestions(query: str):
+    text = (query or '').strip().lower()
+    if not text:
+        return CRYPTO_SUGGESTIONS
+
+    matches = []
+    for item in CRYPTO_SUGGESTIONS:
+        haystack = ' '.join([item['symbol'], item['name'], *item['aliases']]).lower()
+        if text in haystack:
+            matches.append(item)
+    return matches
+
+
+def build_crypto_live_payload(symbol: str = BTC_SYMBOL):
+    history = fetch_historical_data(symbol=symbol, period='2y', interval='1d')
+    intraday = fetch_historical_data(symbol=symbol, period='5d', interval='1h')
+    if history.empty:
+        return None
+
+    live_source = intraday if not intraday.empty else history
+    live_price = round(float(live_source['Close'].iloc[-1]), 2)
+    previous_close = float(history['Close'].iloc[-2]) if len(history) > 1 else live_price
+    change_pct = round(((live_price - previous_close) / previous_close) * 100, 2) if previous_close else 0
+
+    recent = history.tail(120)
+    return {
+        'symbol': symbol,
+        'name': 'Bitcoin / US Dollar',
+        'live_price': live_price,
+        'change_pct_24h': change_pct,
+        'dates': recent.index.strftime('%Y-%m-%d').tolist(),
+        'prices': np.round(recent['Close'], 2).tolist(),
+    }
+
+
+def build_crypto_regression_payload(symbol: str = BTC_SYMBOL):
+    frame = fetch_historical_data(symbol=symbol, period='2y', interval='1d')
+    if frame.empty or len(frame) < 60:
+        return None
+
+    frame = frame.reset_index()
+    frame['date'] = frame['Date'].dt.strftime('%Y-%m-%d')
+    frame['t_index'] = np.arange(len(frame))
+
+    x = frame[['t_index']].values
+    y = frame['Close'].values
+    linear = LinearRegression()
+    linear.fit(x, y)
+    hist_pred = linear.predict(x)
+
+    future_steps = 14
+    future_x = np.arange(len(frame), len(frame) + future_steps).reshape(-1, 1)
+    future_pred = linear.predict(future_x)
+    future_dates = pd.date_range(frame['Date'].iloc[-1] + pd.Timedelta(days=1), periods=future_steps, freq='D')
+    future_labels = future_dates.strftime('%Y-%m-%d').tolist()
+
+    logistic_df = frame[['Date', 'Close', 'Volume']].copy()
+    logistic_df['return_1d'] = logistic_df['Close'].pct_change(1)
+    logistic_df['return_3d'] = logistic_df['Close'].pct_change(3)
+    logistic_df['return_7d'] = logistic_df['Close'].pct_change(7)
+    logistic_df['volume_change'] = logistic_df['Volume'].pct_change(1)
+    logistic_df['target_up'] = (logistic_df['Close'].shift(-1) > logistic_df['Close']).astype(int)
+    logistic_df = logistic_df.replace([np.inf, -np.inf], np.nan).dropna()
+    if len(logistic_df) < 30:
+        return None
+
+    feature_cols = ['return_1d', 'return_3d', 'return_7d', 'volume_change']
+    logistic = LogisticRegression(max_iter=1000)
+    logistic.fit(logistic_df[feature_cols], logistic_df['target_up'])
+    latest_features = logistic_df[feature_cols].iloc[[-1]]
+    up_probability = float(logistic.predict_proba(latest_features)[0][1])
+
+    recent_slice = 120
+    recent_dates = frame['date'].tolist()[-recent_slice:]
+    recent_actual = np.round(y[-recent_slice:], 2).tolist()
+    recent_linear = np.round(hist_pred[-recent_slice:], 2).tolist()
+
+    return {
+        'symbol': symbol,
+        'name': 'Bitcoin / US Dollar',
+        'dates': recent_dates + future_labels,
+        'actual_close': recent_actual + [None] * future_steps,
+        'linear_predicted_close': recent_linear + np.round(future_pred, 2).tolist(),
+        'logistic': {
+            'up_probability': round(up_probability, 4),
+            'down_probability': round(1 - up_probability, 4),
+            'signal': 'Bullish' if up_probability >= 0.5 else 'Bearish',
+        },
+    }
+
+
+def build_crypto_forecast_payload(symbol: str = BTC_SYMBOL, model_name: str = 'arima'):
+    frame = fetch_historical_data(symbol=symbol, period='2y', interval='1d')
+    if frame.empty or len(frame) < 90:
+        return None
+
+    model_key = (model_name or 'arima').strip().lower()
+    if model_key == 'arima':
+        return _build_crypto_arima_payload(frame=frame, symbol=symbol)
+    if model_key == 'lstm':
+        return _build_crypto_lstm_payload(frame=frame, symbol=symbol)
+    return None
+
+
+def _build_crypto_arima_payload(frame: pd.DataFrame, symbol: str):
+    from statsmodels.tsa.arima.model import ARIMA
+
+    close = frame['Close'].astype(float)
+    forecast_steps = 14
+    model = None
+    for order in ((3, 1, 2), (2, 1, 2), (1, 1, 1)):
+        try:
+            model = ARIMA(close, order=order).fit()
+            break
+        except Exception:
+            model = None
+    if model is None:
+        return None
+
+    fitted = model.predict(start=1, end=len(close) - 1, typ='levels')
+    forecast = model.forecast(steps=forecast_steps)
+
+    recent = frame.tail(120).copy()
+    recent_dates = recent.index.strftime('%Y-%m-%d').tolist()
+    actual_recent = np.round(recent['Close'], 2).tolist()
+
+    fitted_series = pd.Series(index=close.index, dtype=float)
+    fitted_series.iloc[1: len(fitted) + 1] = fitted.values
+    fitted_recent = fitted_series.tail(120).round(2).where(pd.notnull(fitted_series.tail(120)), None).tolist()
+
+    future_dates = pd.date_range(frame.index[-1] + pd.Timedelta(days=1), periods=forecast_steps, freq='D')
+    future_labels = future_dates.strftime('%Y-%m-%d').tolist()
+    combined_pred = fitted_recent + np.round(forecast, 2).tolist()
+
+    return {
+        'symbol': symbol,
+        'name': 'Bitcoin / US Dollar',
+        'model': 'ARIMA',
+        'dates': recent_dates + future_labels,
+        'actual_close': actual_recent + [None] * forecast_steps,
+        'predicted_close': combined_pred,
+        'next_prediction': round(float(forecast.iloc[-1]), 2),
+    }
+
+
+def _build_crypto_lstm_payload(frame: pd.DataFrame, symbol: str):
+    from tensorflow.keras import Sequential
+    from tensorflow.keras.layers import Dense, LSTM
+
+    close_values = frame['Close'].astype(float).values.reshape(-1, 1)
+    if len(close_values) < 120:
+        return None
+
+    scaler = MinMaxScaler()
+    scaled = scaler.fit_transform(close_values)
+    lookback = 30
+
+    x_train = []
+    y_train = []
+    for idx in range(lookback, len(scaled)):
+        x_train.append(scaled[idx - lookback:idx, 0])
+        y_train.append(scaled[idx, 0])
+
+    if len(x_train) < 40:
+        return None
+
+    x_train = np.array(x_train)
+    y_train = np.array(y_train)
+    x_train = x_train.reshape((x_train.shape[0], x_train.shape[1], 1))
+
+    model = Sequential([
+        LSTM(32, input_shape=(lookback, 1)),
+        Dense(1),
+    ])
+    model.compile(optimizer='adam', loss='mean_squared_error')
+    model.fit(x_train, y_train, epochs=8, batch_size=16, verbose=0)
+
+    history_preds = model.predict(x_train, verbose=0)
+    history_prices = scaler.inverse_transform(history_preds).flatten()
+
+    recent = frame.tail(120).copy()
+    recent_dates = recent.index.strftime('%Y-%m-%d').tolist()
+    actual_recent = np.round(recent['Close'], 2).tolist()
+
+    history_series = [None] * len(frame)
+    for idx, value in enumerate(history_prices, start=lookback):
+        history_series[idx] = round(float(value), 2)
+    history_recent = history_series[-120:]
+
+    window = scaled[-lookback:].flatten().tolist()
+    future_predictions = []
+    forecast_steps = 14
+    for _ in range(forecast_steps):
+        sample = np.array(window[-lookback:]).reshape(1, lookback, 1)
+        pred_scaled = float(model.predict(sample, verbose=0)[0][0])
+        window.append(pred_scaled)
+        pred_price = scaler.inverse_transform(np.array([[pred_scaled]])).flatten()[0]
+        future_predictions.append(round(float(pred_price), 2))
+
+    future_dates = pd.date_range(frame.index[-1] + pd.Timedelta(days=1), periods=forecast_steps, freq='D')
+    future_labels = future_dates.strftime('%Y-%m-%d').tolist()
+
+    return {
+        'symbol': symbol,
+        'name': 'Bitcoin / US Dollar',
+        'model': 'LSTM',
+        'dates': recent_dates + future_labels,
+        'actual_close': actual_recent + [None] * forecast_steps,
+        'predicted_close': history_recent + future_predictions,
+        'next_prediction': future_predictions[-1],
     }

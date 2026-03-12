@@ -3,6 +3,7 @@ import ProtectedRoute from './components/ProtectedRoute'
 import HomePage from './pages/HomePage'
 import LandingPage from './pages/LandingPage'
 import LoginPage from './pages/LoginPage'
+import CryptoPage from './pages/CryptoPage'
 import MetalsPage from './pages/MetalsPage'
 import NewsPage from './pages/NewsPage'
 import PortfolioDetailPage from './pages/PortfolioDetailPage'
@@ -31,6 +32,14 @@ function App() {
         element={
           <ProtectedRoute>
             <NewsPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/crypto"
+        element={
+          <ProtectedRoute>
+            <CryptoPage />
           </ProtectedRoute>
         }
       />

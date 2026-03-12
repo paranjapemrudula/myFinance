@@ -761,6 +761,20 @@ a {
   margin: 0.2rem 0 0.55rem;
 }
 
+.crypto-grid {
+  margin-top: 1rem;
+  display: grid;
+  grid-template-columns: 1.2fr 0.8fr;
+  gap: 0.9rem;
+}
+
+.crypto-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.7rem;
+  margin-bottom: 1rem;
+}
+
 @keyframes pulse {
   0% {
     transform: scale(1);
@@ -805,7 +819,8 @@ a {
   }
 
   .metals-grid,
-  .metals-pred-grid {
+  .metals-pred-grid,
+  .crypto-grid {
     grid-template-columns: 1fr;
   }
 
