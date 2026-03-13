@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import PublicNavbar from '../components/PublicNavbar'
-import { api } from '../lib/api'
+import { publicApi } from '../lib/api'
 
 function LandingPage() {
   const [overview, setOverview] = useState({ top_stocks: [], gold: null })
@@ -11,7 +11,7 @@ function LandingPage() {
 
   const loadOverview = async () => {
     try {
-      const response = await api.get('/api/market/overview/')
+      const response = await publicApi.get('/api/market/overview/')
       setOverview(response.data)
       setLastUpdated(new Date())
       setError('')

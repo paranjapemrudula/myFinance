@@ -14,85 +14,83 @@ import { api } from '../lib/api'
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Tooltip, Legend)
 
+const horizonOptions = [
+  { value: '1M', label: '1 Month' },
+  { value: '3M', label: '3 Months' },
+  { value: '6M', label: '6 Months' },
+  { value: '1Y', label: '1 Year' },
+]
+
+const modelMeta = {
+  linear: {
+    title: '📈 Linear Regression',
+    description: 'Best when you want a clean trend-based projection of BTC price over the selected range.',
+  },
+  logistic: {
+    title: '🎯 Logistic Regression',
+    description: 'Best when you want a directional signal that estimates the probability of BTC moving up next.',
+  },
+  arima: {
+    title: '🔮 ARIMA Forecast',
+    description: 'Best when you want a classical time-series forecast that follows historical BTC structure.',
+  },
+  lstm: {
+    title: '🤖 LSTM Forecast',
+    description: 'Best when you want a neural sequence model that learns longer BTC price patterns.',
+  },
+}
+
 function CryptoPage() {
-  const [query, setQuery] = useState('Bit')
-  const [suggestions, setSuggestions] = useState([])
-  const [selectedAsset, setSelectedAsset] = useState(null)
   const [liveData, setLiveData] = useState(null)
-  const [regressionData, setRegressionData] = useState(null)
-  const [forecastData, setForecastData] = useState(null)
-  const [forecastModel, setForecastModel] = useState('arima')
-  const [loading, setLoading] = useState(false)
+  const [selectedModel, setSelectedModel] = useState('linear')
+  const [selectedData, setSelectedData] = useState(null)
+  const [forecastHorizon, setForecastHorizon] = useState('3M')
+  const [loadingKey, setLoadingKey] = useState('')
   const [error, setError] = useState('')
 
   useEffect(() => {
-    const timer = setTimeout(async () => {
+    const loadLiveData = async () => {
       try {
-        const response = await api.get(`/api/crypto/suggest/?q=${encodeURIComponent(query.trim())}`)
-        setSuggestions(response.data)
+        const response = await api.get('/api/crypto/live/?symbol=BTC-USD')
+        setLiveData(response.data)
       } catch {
-        setSuggestions([])
+        setError('Unable to load BTC-USD live data right now.')
       }
-    }, 200)
-
-    return () => clearTimeout(timer)
-  }, [query])
-
-  const loadLiveData = async (symbol) => {
-    const response = await api.get(`/api/crypto/live/?symbol=${encodeURIComponent(symbol)}`)
-    setLiveData(response.data)
-  }
-
-  const loadRegressionData = async (symbol) => {
-    setLoading(true)
-    setError('')
-    try {
-      const response = await api.get(`/api/crypto/regression/?symbol=${encodeURIComponent(symbol)}`)
-      setRegressionData(response.data)
-      setForecastData(null)
-    } catch {
-      setError('Unable to load regression insights for this crypto asset.')
-    } finally {
-      setLoading(false)
     }
-  }
 
-  const loadForecastData = async (symbol, model) => {
-    setLoading(true)
-    setError('')
-    try {
-      const response = await api.get(
-        `/api/crypto/forecast/?symbol=${encodeURIComponent(symbol)}&model=${encodeURIComponent(model)}`
-      )
-      setForecastData(response.data)
-      setForecastModel(model)
-      setRegressionData(null)
-    } catch {
-      setError(`Unable to load ${model.toUpperCase()} forecast for this crypto asset.`)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const handleSelectAsset = async (asset) => {
-    setSelectedAsset(asset)
-    setQuery(asset.name)
-    setSuggestions([])
-    setRegressionData(null)
-    setForecastData(null)
-    setError('')
-
-    try {
-      await loadLiveData(asset.symbol)
-    } catch {
-      setError('Unable to load BTC-USD live data right now.')
-    }
-  }
+    loadLiveData()
+  }, [])
 
   useEffect(() => {
-    const defaultAsset = { symbol: 'BTC-USD', name: 'Bitcoin / US Dollar' }
-    handleSelectAsset(defaultAsset)
-  }, [])
+    const loadSelectedModel = async () => {
+      setLoadingKey(selectedModel)
+      setError('')
+
+      try {
+        let response
+        if (selectedModel === 'linear') {
+          response = await api.get(
+            `/api/crypto/linear-regression/?symbol=BTC-USD&horizon=${encodeURIComponent(forecastHorizon)}`
+          )
+        } else if (selectedModel === 'logistic') {
+          response = await api.get('/api/crypto/logistic-regression/?symbol=BTC-USD')
+        } else {
+          response = await api.get(
+            `/api/crypto/forecast/?symbol=BTC-USD&model=${encodeURIComponent(selectedModel)}&horizon=${encodeURIComponent(
+              forecastHorizon
+            )}`
+          )
+        }
+        setSelectedData(response.data)
+      } catch {
+        setError(`Unable to load ${selectedModel.toUpperCase()} analysis for BTC-USD.`)
+      } finally {
+        setLoadingKey('')
+      }
+    }
+
+    loadSelectedModel()
+  }, [selectedModel, forecastHorizon])
 
   const liveChartData = useMemo(() => {
     if (!liveData) return null
@@ -100,198 +98,189 @@ function CryptoPage() {
       labels: liveData.dates || [],
       datasets: [
         {
-          label: `${liveData.symbol} close`,
+          label: 'Actual BTC-USD',
           data: liveData.prices || [],
-          borderColor: '#d97706',
-          backgroundColor: 'rgba(217, 119, 6, 0.18)',
+          borderColor: '#f97316',
+          backgroundColor: 'rgba(249, 115, 22, 0.16)',
           borderWidth: 2,
           pointRadius: 0,
+          tension: 0.28,
         },
       ],
     }
   }, [liveData])
 
-  const regressionChartData = useMemo(() => {
-    if (!regressionData) return null
-    return {
-      labels: regressionData.dates || [],
-      datasets: [
-        {
-          label: 'Actual BTC-USD',
-          data: regressionData.actual_close || [],
-          borderColor: '#0a9396',
-          backgroundColor: 'rgba(10, 147, 150, 0.18)',
-          borderWidth: 2,
-          pointRadius: 0,
-        },
-        {
-          label: 'Linear Regression',
-          data: regressionData.linear_predicted_close || [],
-          borderColor: '#ee9b00',
-          backgroundColor: 'rgba(238, 155, 0, 0.18)',
-          borderDash: [6, 4],
-          borderWidth: 2,
-          pointRadius: 0,
-        },
-      ],
-    }
-  }, [regressionData])
+  const analysisChartData = useMemo(() => {
+    if (!selectedData) return null
 
-  const forecastChartData = useMemo(() => {
-    if (!forecastData) return null
+    if (selectedModel === 'logistic') {
+      return {
+        labels: selectedData.dates || [],
+        datasets: [
+          {
+            label: 'Up Probability (%)',
+            data: selectedData.up_probability_series || [],
+            borderColor: '#7c3aed',
+            backgroundColor: 'rgba(124, 58, 237, 0.16)',
+            borderWidth: 2,
+            pointRadius: 0,
+            tension: 0.28,
+          },
+        ],
+      }
+    }
+
     return {
-      labels: forecastData.dates || [],
+      labels: selectedData.dates || [],
       datasets: [
         {
           label: 'Actual BTC-USD',
-          data: forecastData.actual_close || [],
-          borderColor: '#005f73',
-          backgroundColor: 'rgba(0, 95, 115, 0.18)',
+          data: selectedData.actual_close || [],
+          borderColor: '#0a9396',
+          backgroundColor: 'rgba(10, 147, 150, 0.16)',
           borderWidth: 2,
           pointRadius: 0,
+          tension: 0.28,
         },
         {
-          label: `${forecastData.model} Forecast`,
-          data: forecastData.predicted_close || [],
-          borderColor: '#bb3e03',
-          backgroundColor: 'rgba(187, 62, 3, 0.18)',
+          label:
+            selectedModel === 'linear'
+              ? 'Predicted BTC-USD'
+              : `${selectedData.model || selectedModel.toUpperCase()} Predicted BTC-USD`,
+          data: selectedData.predicted_close || [],
+          borderColor: '#ee9b00',
+          backgroundColor: 'rgba(238, 155, 0, 0.16)',
           borderDash: [6, 4],
           borderWidth: 2,
           pointRadius: 0,
+          tension: 0.28,
         },
       ],
     }
-  }, [forecastData])
+  }, [selectedData, selectedModel])
+
+  const activeMeta = modelMeta[selectedModel]
 
   return (
     <AppShell title="Crypto">
-      <section className="dashboard-hero">
-        <div>
-          <h2>BTC-USD Analytics</h2>
-          <p>Live Bitcoin pricing from yfinance with 2-year regression, ARIMA, and LSTM forecasting.</p>
+      <section className="crypto-hero">
+        <div className="crypto-hero-copy">
+          <p className="badge">BTC Focused</p>
+          <h2>BTC-USD Intelligence Hub ₿</h2>
+          <p>
+            Explore live Bitcoin pricing from yfinance with interactive model switching, forecast ranges, and
+            side-by-side charts for actual versus predicted behavior.
+          </p>
         </div>
-      </section>
 
-      <section className="stock-search-panel">
-        <div className="search-wrap">
-          <input
-            name="crypto-query"
-            type="text"
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder="Search Bitcoin / BTC-USD"
-          />
-          {suggestions.length > 0 ? (
-            <div className="suggestions-box">
-              {suggestions.map((item) => (
-                <button
-                  key={item.symbol}
-                  type="button"
-                  className="suggestion-item suggestion-item-rich"
-                  onClick={() => handleSelectAsset(item)}
-                >
-                  <div>
-                    <strong>{item.symbol}</strong>
-                    <span>{item.name}</span>
-                  </div>
-                </button>
+        <div className="crypto-button-row">
+          <button
+            className={`button crypto-button ${selectedModel === 'linear' ? 'crypto-button-active' : ''}`}
+            type="button"
+            onClick={() => setSelectedModel('linear')}
+          >
+            📈 Linear Regression
+          </button>
+          <button
+            className={`button crypto-button ${selectedModel === 'logistic' ? 'crypto-button-active' : ''}`}
+            type="button"
+            onClick={() => setSelectedModel('logistic')}
+          >
+            🎯 Logistic Regression
+          </button>
+          <button
+            className={`button crypto-button ${selectedModel === 'arima' ? 'crypto-button-active' : ''}`}
+            type="button"
+            onClick={() => setSelectedModel('arima')}
+          >
+            🔮 ARIMA
+          </button>
+          <button
+            className={`button crypto-button ${selectedModel === 'lstm' ? 'crypto-button-active' : ''}`}
+            type="button"
+            onClick={() => setSelectedModel('lstm')}
+          >
+            🤖 LSTM
+          </button>
+        </div>
+
+        <div className="crypto-subpanel">
+          <div className="crypto-controls">
+            <label htmlFor="forecast-horizon">Graph Range</label>
+            <select
+              id="forecast-horizon"
+              value={forecastHorizon}
+              onChange={(event) => setForecastHorizon(event.target.value)}
+              disabled={selectedModel === 'logistic'}
+            >
+              {horizonOptions.map((item) => (
+                <option key={item.value} value={item.value}>
+                  {item.label}
+                </option>
               ))}
-            </div>
-          ) : null}
+            </select>
+          </div>
+
+          <div className="crypto-model-meta">
+            <h3>Choose Your BTC Model</h3>
+            <p>
+              <strong>{activeMeta.title}</strong> {activeMeta.description}
+            </p>
+          </div>
         </div>
       </section>
 
       {error ? <p className="form-error">{error}</p> : null}
 
-      {liveData ? (
-        <section className="crypto-grid">
-          <article className="metals-card">
-            <h3>{selectedAsset?.name || liveData.name}</h3>
+      {(liveData || selectedData) && (
+        <section className="crypto-chart-grid">
+          <article className="crypto-card crypto-card-spotlight">
+            <div className="crypto-card-head">
+              <h3>🚀 Live BTC-USD Market</h3>
+              <span className="live-dot">LIVE</span>
+            </div>
             <div className="metals-metrics">
-              <span>Live Price: {liveData.live_price ?? '-'} USD</span>
-              <span>24H Move: {liveData.change_pct_24h ?? '-'}%</span>
+              <span>Live Price: {liveData?.live_price ?? '-'} USD</span>
+              <span>24H Move: {liveData?.change_pct_24h ?? '-'}%</span>
             </div>
             {liveChartData ? (
               <div className="chart-wrap">
                 <Line data={liveChartData} options={{ responsive: true, maintainAspectRatio: false }} />
               </div>
+            ) : (
+              <p>Loading live chart...</p>
+            )}
+          </article>
+
+          <article className="crypto-card crypto-analysis-panel">
+            <div className="crypto-card-head">
+              <h3>{activeMeta.title}</h3>
+              <span className="user-chip">{selectedModel.toUpperCase()}</span>
+            </div>
+            <div className="metals-metrics">
+              {selectedModel === 'logistic' ? (
+                <>
+                  <span>Up Probability: {((selectedData?.up_probability || 0) * 100).toFixed(2)}%</span>
+                  <span>Down Probability: {((selectedData?.down_probability || 0) * 100).toFixed(2)}%</span>
+                  <span>Signal: {selectedData?.signal || '-'}</span>
+                </>
+              ) : (
+                <>
+                  <span>Next Predicted Price: {selectedData?.next_prediction ?? '-'}</span>
+                  <span>Graph Range: {selectedData?.horizon || forecastHorizon}</span>
+                  <span>Actual vs Predicted Price</span>
+                </>
+              )}
+            </div>
+            {loadingKey ? <p className="muted">Loading {loadingKey.toUpperCase()} graph...</p> : null}
+            {analysisChartData ? (
+              <div className="chart-wrap">
+                <Line data={analysisChartData} options={{ responsive: true, maintainAspectRatio: false }} />
+              </div>
             ) : null}
           </article>
-
-          <article className="metals-card">
-            <h3>Choose Analysis</h3>
-            <p className="muted">Option 1 combines linear regression with logistic direction probability.</p>
-            <div className="crypto-actions">
-              <button
-                className="button"
-                type="button"
-                disabled={loading || !selectedAsset}
-                onClick={() => loadRegressionData(selectedAsset.symbol)}
-              >
-                Regression: Linear + Logistic
-              </button>
-            </div>
-            <p className="muted">Option 2 gives sequential forecasts with ARIMA or LSTM.</p>
-            <div className="crypto-actions">
-              <button
-                className="button button-secondary"
-                type="button"
-                disabled={loading || !selectedAsset}
-                onClick={() => loadForecastData(selectedAsset.symbol, 'arima')}
-              >
-                Forecast with ARIMA
-              </button>
-              <button
-                className="button button-secondary"
-                type="button"
-                disabled={loading || !selectedAsset}
-                onClick={() => loadForecastData(selectedAsset.symbol, 'lstm')}
-              >
-                Forecast with LSTM
-              </button>
-            </div>
-            {loading ? <p>Loading analysis...</p> : null}
-          </article>
         </section>
-      ) : null}
-
-      {regressionData ? (
-        <section className="analysis-panel">
-          <div className="analysis-panel-head">
-            <h3>Regression Stack for {regressionData.symbol}</h3>
-          </div>
-          <div className="metals-metrics">
-            <span>Logistic Up Probability: {(regressionData.logistic?.up_probability ?? 0) * 100}%</span>
-            <span>Logistic Signal: {regressionData.logistic?.signal || '-'}</span>
-            <span>Next Linear Target: {regressionData.linear_predicted_close?.slice(-1)[0] ?? '-'}</span>
-          </div>
-          {regressionChartData ? (
-            <div className="chart-wrap">
-              <Line data={regressionChartData} options={{ responsive: true, maintainAspectRatio: false }} />
-            </div>
-          ) : null}
-        </section>
-      ) : null}
-
-      {forecastData ? (
-        <section className="analysis-panel">
-          <div className="analysis-panel-head">
-            <h3>
-              {forecastData.model} Forecast for {forecastData.symbol}
-            </h3>
-            <span className="user-chip">{forecastModel.toUpperCase()}</span>
-          </div>
-          <div className="metals-metrics">
-            <span>Next Projected Price: {forecastData.next_prediction ?? '-'}</span>
-            <span>Lookback Window: 2 years daily data</span>
-          </div>
-          {forecastChartData ? (
-            <div className="chart-wrap">
-              <Line data={forecastChartData} options={{ responsive: true, maintainAspectRatio: false }} />
-            </div>
-          ) : null}
-        </section>
-      ) : null}
+      )}
     </AppShell>
   )
 }

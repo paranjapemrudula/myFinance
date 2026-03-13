@@ -128,6 +128,8 @@ a {
 
 .button:hover {
   filter: brightness(1.05);
+  transform: translateY(-2px) scale(1.01);
+  box-shadow: 0 14px 24px rgba(5, 45, 53, 0.16);
   text-decoration: none;
 }
 
@@ -768,11 +770,157 @@ a {
   gap: 0.9rem;
 }
 
+.crypto-chart-grid {
+  margin-top: 1rem;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.9rem;
+}
+
 .crypto-actions {
   display: flex;
   flex-wrap: wrap;
   gap: 0.7rem;
   margin-bottom: 1rem;
+}
+
+.crypto-controls {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.65rem;
+  padding: 0.95rem;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid rgba(249, 115, 22, 0.14);
+}
+
+.crypto-controls label {
+  font-weight: 700;
+  color: var(--text-0);
+}
+
+.crypto-controls select {
+  border: 1px solid rgba(249, 115, 22, 0.24);
+  border-radius: 12px;
+  padding: 0.6rem 0.8rem;
+  background: rgba(255, 255, 255, 0.78);
+  color: var(--text-0);
+  width: 100%;
+}
+
+.crypto-hero {
+  padding: 1.2rem;
+  border: 1px solid rgba(249, 115, 22, 0.25);
+  border-radius: 18px;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.84), rgba(255, 237, 213, 0.75));
+  box-shadow: 0 18px 32px rgba(116, 66, 0, 0.12);
+}
+
+.crypto-hero h2 {
+  margin: 0.15rem 0 0.45rem;
+}
+
+.crypto-hero-copy {
+  margin-bottom: 1rem;
+}
+
+.crypto-button-row {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.crypto-subpanel {
+  display: grid;
+  grid-template-columns: 280px 1fr;
+  gap: 0.9rem;
+}
+
+.crypto-model-meta {
+  padding: 0.95rem 1rem;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid rgba(249, 115, 22, 0.14);
+}
+
+.crypto-model-meta h3 {
+  margin: 0 0 0.4rem;
+}
+
+.crypto-model-meta p {
+  margin: 0;
+  color: var(--text-1);
+  line-height: 1.55;
+}
+
+.crypto-card {
+  padding: 1rem;
+  border: 1px solid rgba(249, 115, 22, 0.18);
+  border-radius: 18px;
+  background: linear-gradient(160deg, rgba(255, 255, 255, 0.82), rgba(255, 247, 237, 0.7));
+  box-shadow: 0 18px 34px rgba(41, 28, 6, 0.12);
+  transition: transform 180ms ease, box-shadow 180ms ease, border-color 180ms ease;
+}
+
+.crypto-card:hover,
+.crypto-analysis-panel:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 20px 36px rgba(41, 28, 6, 0.16);
+  border-color: rgba(249, 115, 22, 0.32);
+}
+
+.crypto-card-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.8rem;
+}
+
+.crypto-card-head h3 {
+  margin: 0 0 0.65rem;
+}
+
+.crypto-card-spotlight {
+  position: relative;
+  overflow: hidden;
+}
+
+.crypto-card-spotlight::after {
+  content: '';
+  position: absolute;
+  inset: auto -40px -40px auto;
+  width: 120px;
+  height: 120px;
+  background: radial-gradient(circle, rgba(249, 115, 22, 0.2), transparent 70%);
+  pointer-events: none;
+}
+
+.crypto-button {
+  width: 100%;
+  min-height: 54px;
+  font-size: 0.98rem;
+  box-shadow: 0 12px 22px rgba(10, 31, 38, 0.14);
+  transition: transform 160ms ease, box-shadow 160ms ease, filter 160ms ease;
+}
+
+.crypto-button-active {
+  outline: 2px solid rgba(255, 255, 255, 0.78);
+  outline-offset: 2px;
+}
+
+.crypto-button:hover:not(:disabled) {
+  transform: translateY(-4px) scale(1.02);
+  box-shadow: 0 16px 26px rgba(10, 31, 38, 0.18);
+}
+
+.crypto-analysis-panel {
+  border: 1px solid rgba(249, 115, 22, 0.18);
+  border-radius: 18px;
+  background: linear-gradient(160deg, rgba(255, 255, 255, 0.82), rgba(255, 247, 237, 0.7));
+  box-shadow: 0 18px 34px rgba(41, 28, 6, 0.12);
+  transition: transform 180ms ease, box-shadow 180ms ease, border-color 180ms ease;
 }
 
 @keyframes pulse {
@@ -820,7 +968,13 @@ a {
 
   .metals-grid,
   .metals-pred-grid,
-  .crypto-grid {
+  .crypto-grid,
+  .crypto-chart-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .crypto-button-row,
+  .crypto-subpanel {
     grid-template-columns: 1fr;
   }
 
