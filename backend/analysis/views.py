@@ -2,7 +2,9 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.permissions import AllowAny
 
+from .chatbot import generate_chatbot_reply
 from .services import (
+    build_portfolio_analytics_payload,
     build_crypto_forecast_payload,
     build_crypto_linear_regression_payload,
     build_crypto_live_payload,
@@ -17,6 +19,22 @@ from .services import (
     normalize_timeframe,
     resolve_timeframe,
 )
+
+
+class ChatbotView(APIView):
+    def post(self, request):
+        question = request.data.get('question', '')
+        history = request.data.get('history', [])
+        payload = generate_chatbot_reply(user=request.user, question=question, history=history)
+        return Response(payload)
+
+
+class PortfolioAnalyticsView(APIView):
+    def get(self, request, portfolio_id):
+        payload = build_portfolio_analytics_payload(portfolio_id=portfolio_id, user=request.user)
+        if payload is None:
+            return Response({'detail': 'Portfolio not found.'}, status=404)
+        return Response(payload)
 
 
 class RegressionAnalysisView(APIView):

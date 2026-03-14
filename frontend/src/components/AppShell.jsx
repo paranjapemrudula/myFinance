@@ -1,5 +1,6 @@
 import { Link, useNavigate } from 'react-router-dom'
 import AssistantChatbot from './AssistantChatbot'
+import MarketTicker from './MarketTicker'
 import { clearAuth, getCurrentUser } from '../lib/auth'
 
 const protectedLinks = [
@@ -22,6 +23,7 @@ function AppShell({ title, children }) {
 
   return (
     <div className="app-page">
+      <MarketTicker />
       <header className="topbar">
         <div className="brand-block">
           <Link className="brand-link" to="/home">

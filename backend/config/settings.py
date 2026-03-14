@@ -180,6 +180,18 @@ CACHES = {
 
 ANALYSIS_CACHE_TTL_SECONDS = 900
 
+OPENAI_API_KEY = os.environ.get('OPENAI_API_KEY', '')
+OPENAI_CHAT_MODEL = os.environ.get('OPENAI_CHAT_MODEL', 'gpt-5-mini')
+OPENAI_GUARD_MODEL = os.environ.get('OPENAI_GUARD_MODEL', 'gpt-5-nano')
+OPENAI_CHAT_BENCHMARK_MODELS = get_env_list(
+    'OPENAI_CHAT_BENCHMARK_MODELS',
+    'gpt-5-mini,gpt-5.2,gpt-5-nano',
+)
+CHATBOT_ALLOWED_ROUTE_PATHS = get_env_list(
+    'CHATBOT_ALLOWED_ROUTE_PATHS',
+    '/home,/news,/crypto,/metals,/portfolios,/profile',
+)
+
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 SESSION_COOKIE_SECURE = get_env_bool('DJANGO_SESSION_COOKIE_SECURE', default=not DEBUG)
 CSRF_COOKIE_SECURE = get_env_bool('DJANGO_CSRF_COOKIE_SECURE', default=not DEBUG)

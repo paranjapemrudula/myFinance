@@ -6,15 +6,22 @@ import { api } from '../lib/api'
 function HomePage() {
   const [portfolios, setPortfolios] = useState([])
   const [stockCount, setStockCount] = useState(0)
+  const [marketOverview, setMarketOverview] = useState({ top_stocks: [], gold: null })
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [marketError, setMarketError] = useState('')
 
   useEffect(() => {
     const loadDashboard = async () => {
       try {
-        const response = await api.get('/api/portfolios/')
-        const list = response.data
+        const [portfolioResponse, overviewResponse] = await Promise.all([
+          api.get('/api/portfolios/'),
+          api.get('/api/market/overview/'),
+        ])
+        const list = portfolioResponse.data
         setPortfolios(list)
+        setMarketOverview(overviewResponse.data || { top_stocks: [], gold: null })
+        setMarketError('')
 
         const stocksResponses = await Promise.all(list.map((item) => api.get(`/api/portfolios/${item.id}/stocks/`)))
         const total = stocksResponses.reduce((sum, current) => sum + current.data.length, 0)
@@ -26,7 +33,19 @@ function HomePage() {
       }
     }
 
+    const refreshLiveOverview = async () => {
+      try {
+        const response = await api.get('/api/market/overview/')
+        setMarketOverview(response.data || { top_stocks: [], gold: null })
+        setMarketError('')
+      } catch {
+        setMarketError('Live market feed is unavailable right now.')
+      }
+    }
+
     loadDashboard()
+    const timer = setInterval(refreshLiveOverview, 20000)
+    return () => clearInterval(timer)
   }, [])
 
   const insightText = useMemo(() => {
@@ -87,6 +106,42 @@ function HomePage() {
               <h3>Insight</h3>
               <p>{insightText}</p>
               <p className="muted">Next phase can layer valuation and trend charts on top of these holdings.</p>
+            </article>
+          </section>
+
+          <section className="dashboard-grid">
+            <article className="feature-card">
+              <div className="market-card-head">
+                <h3>Live Market Pulse</h3>
+                <span className="live-dot">LIVE</span>
+              </div>
+              {marketError ? <p className="form-error">{marketError}</p> : null}
+              <div className="market-list">
+                {(marketOverview.top_stocks || []).map((stock) => (
+                  <article key={stock.symbol} className="market-item">
+                    <div>
+                      <strong>{stock.symbol}</strong>
+                      <p>{stock.company_name}</p>
+                    </div>
+                    <div className="market-meta">
+                      <span>Last: {stock.last_value ?? '-'}</span>
+                      <span>P/E: {stock.pe_ratio ?? '-'}</span>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            </article>
+
+            <article className="feature-card">
+              <h3>Live Gold Snapshot</h3>
+              <div className="gold-ticker">
+                <p>{marketOverview.gold?.name || 'Gold Futures'}</p>
+                <div className="gold-values">
+                  <span>Last: {marketOverview.gold?.last_value ?? '-'}</span>
+                  <span>365D High: {marketOverview.gold?.high_365d ?? '-'}</span>
+                  <span>365D Low: {marketOverview.gold?.low_365d ?? '-'}</span>
+                </div>
+              </div>
             </article>
           </section>
         </>

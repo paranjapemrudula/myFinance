@@ -9,3 +9,4 @@ scikit-learn
 gunicorn
 statsmodels
 tensorflow-cpu
+openai

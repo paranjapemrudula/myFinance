@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import {
+  BarElement,
   CategoryScale,
   Chart as ChartJS,
   Legend,
@@ -9,15 +10,16 @@ import {
   PointElement,
   Tooltip,
 } from 'chart.js'
-import { Line, Scatter } from 'react-chartjs-2'
+import { Bar, Line, Scatter } from 'react-chartjs-2'
 import AppShell from '../components/AppShell'
 import { api } from '../lib/api'
 
-ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Tooltip, Legend)
+ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, BarElement, Tooltip, Legend)
 
 function PortfolioDetailPage() {
   const timeframeOptions = ['1D', '1H', '1M']
   const { id } = useParams()
+  const portfolioInsightsRef = useRef(null)
   const [portfolio, setPortfolio] = useState(null)
   const [stocks, setStocks] = useState([])
   const [sectors, setSectors] = useState([])
@@ -33,6 +35,12 @@ function PortfolioDetailPage() {
     payload: null,
   })
   const [analysisTimeframe, setAnalysisTimeframe] = useState('1D')
+  const [portfolioInsights, setPortfolioInsights] = useState({
+    section: '',
+    loading: false,
+    error: '',
+    payload: null,
+  })
   const [editingForm, setEditingForm] = useState({
     symbol: '',
     company_name: '',
@@ -230,6 +238,37 @@ function PortfolioDetailPage() {
     handleOpenAnalysis(analysisPanel.symbol, analysisPanel.type, analysisTimeframe)
   }, [analysisTimeframe])
 
+  useEffect(() => {
+    if (!portfolioInsights.section || !portfolioInsightsRef.current) return
+    portfolioInsightsRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }, [portfolioInsights.section, portfolioInsights.loading, portfolioInsights.payload, portfolioInsights.error])
+
+  const loadPortfolioInsights = async (section) => {
+    setPortfolioInsights((prev) => ({
+      section,
+      loading: true,
+      error: '',
+      payload: prev.payload,
+    }))
+
+    try {
+      const response = await api.get(`/api/portfolios/${id}/analytics/`)
+      setPortfolioInsights({
+        section,
+        loading: false,
+        error: '',
+        payload: response.data,
+      })
+    } catch {
+      setPortfolioInsights({
+        section,
+        loading: false,
+        error: 'Could not load portfolio comparison charts.',
+        payload: null,
+      })
+    }
+  }
+
   const regressionChartData = useMemo(() => {
     if (analysisPanel.type !== 'regression' || !analysisPanel.payload) return null
     return {
@@ -274,37 +313,86 @@ function PortfolioDetailPage() {
   }, [analysisPanel])
 
   const clusterChartData = useMemo(() => {
-    if (analysisPanel.type !== 'clustering' || !analysisPanel.payload?.points) return null
+    if (portfolioInsights.section !== 'cluster' || !portfolioInsights.payload?.clustering?.points?.length) return null
     const colors = ['#0a9396', '#ee9b00', '#bb3e03', '#6d597a']
     const grouped = {}
-    analysisPanel.payload.points.forEach((point) => {
+    portfolioInsights.payload.clustering.points.forEach((point) => {
       const key = point.cluster_id ?? 0
       if (!grouped[key]) grouped[key] = []
-      grouped[key].push({ x: point.x, y: point.y })
+      grouped[key].push({
+        x: point.x,
+        y: point.y,
+        company_name: point.company_name,
+        symbol: point.symbol,
+      })
     })
 
     return {
       datasets: Object.keys(grouped).map((clusterId, index) => ({
         label:
-          analysisPanel.payload?.cluster_labels?.[clusterId] ||
-          analysisPanel.payload?.cluster_labels?.[Number(clusterId)] ||
+          portfolioInsights.payload?.clustering?.cluster_labels?.[clusterId] ||
+          portfolioInsights.payload?.clustering?.cluster_labels?.[Number(clusterId)] ||
           `Cluster ${clusterId}`,
         data: grouped[clusterId],
         backgroundColor: colors[index % colors.length],
       })),
     }
-  }, [analysisPanel])
+  }, [portfolioInsights])
+
+  const peBarChartData = useMemo(() => {
+    if (portfolioInsights.section !== 'pe' || !portfolioInsights.payload?.pe_comparison?.length) return null
+    const rows = portfolioInsights.payload.pe_comparison.filter((item) => item.pe_ratio !== null)
+    if (!rows.length) return null
+    return {
+      labels: rows.map((item) => item.symbol),
+      datasets: [
+        {
+          label: 'P/E Ratio',
+          data: rows.map((item) => item.pe_ratio),
+          backgroundColor: ['#0a9396', '#94d2bd', '#ee9b00', '#ca6702', '#005f73', '#bb3e03'],
+          borderRadius: 8,
+        },
+      ],
+    }
+  }, [portfolioInsights])
 
   return (
     <AppShell title={portfolio?.name || `Portfolio ${id}`}>
-      <section className="portfolio-hero portfolio-hero-rich">
-        <div>
-          <h2>{portfolio?.name || 'Portfolio'}</h2>
-          <p>Add stocks using only search. Click any suggestion to add instantly with live quote defaults.</p>
-        </div>
-        <Link className="button button-secondary" to="/portfolios">
-          Back to Portfolios
-        </Link>
+      <section className="portfolio-header-grid">
+        <section className="portfolio-hero portfolio-hero-rich">
+          <div>
+            <h2>{portfolio?.name || 'Portfolio'}</h2>
+            <p>Add stocks using only search. Click any suggestion to add instantly with live quote defaults.</p>
+          </div>
+          <Link className="button button-secondary" to="/portfolios">
+            Back to Portfolios
+          </Link>
+        </section>
+
+        {!loading && stocks.length > 0 ? (
+          <section className="portfolio-insights-ribbon">
+            <div className="portfolio-insights-actions">
+              <button
+              className={`button portfolio-action-button portfolio-action-pe ${
+                  portfolioInsights.section === 'pe' ? 'portfolio-action-active' : ''
+                }`}
+                type="button"
+                onClick={() => loadPortfolioInsights('pe')}
+              >
+                Stock Comparison on P/E Ratio
+              </button>
+              <button
+                className={`button portfolio-action-button portfolio-action-cluster ${
+                  portfolioInsights.section === 'cluster' ? 'portfolio-action-active' : ''
+                }`}
+                type="button"
+                onClick={() => loadPortfolioInsights('cluster')}
+              >
+                Stock Comparison on Clustering
+              </button>
+            </div>
+          </section>
+        ) : null}
       </section>
 
       <section className="stock-search-panel">
@@ -440,7 +528,7 @@ function PortfolioDetailPage() {
                         type="button"
                         onClick={() => handleOpenAnalysis(stock.symbol, 'regression')}
                       >
-                        PE Graph
+                        Price Trend
                       </button>
                       <button
                         className="button button-secondary"
@@ -448,13 +536,6 @@ function PortfolioDetailPage() {
                         onClick={() => handleOpenAnalysis(stock.symbol, 'discount')}
                       >
                         Discount
-                      </button>
-                      <button
-                        className="button button-secondary"
-                        type="button"
-                        onClick={() => handleOpenAnalysis(stock.symbol, 'clustering')}
-                      >
-                        Cluster
                       </button>
                     </div>
                   </td>
@@ -547,37 +628,80 @@ function PortfolioDetailPage() {
                   ) : null}
                 </>
               ) : null}
-              {analysisPanel.type === 'clustering' ? (
-                <>
-                  <p>Cluster data loaded: {analysisPanel.payload?.points?.length || 0} points.</p>
-                  {analysisPanel.payload?.cluster_labels ? (
-                    <ul className="cluster-legend">
-                      {Object.entries(analysisPanel.payload.cluster_labels).map(([clusterId, clusterName]) => (
-                        <li key={clusterId}>
-                          <strong>Cluster {clusterId}:</strong> {clusterName}
-                        </li>
-                      ))}
-                    </ul>
-                  ) : null}
-                  {clusterChartData ? (
-                    <div className="chart-wrap">
-                      <Scatter
-                        data={clusterChartData}
-                        options={{
-                          responsive: true,
-                          maintainAspectRatio: false,
-                          plugins: { legend: { position: 'top' } },
-                          scales: {
-                            x: { title: { display: true, text: 'Returns' } },
-                            y: { title: { display: true, text: 'Volatility' } },
-                          },
-                        }}
-                      />
-                    </div>
-                  ) : null}
-                </>
-              ) : null}
             </div>
+          ) : null}
+        </section>
+      )}
+
+      {(portfolioInsights.section || portfolioInsights.loading || portfolioInsights.error) && (
+        <section ref={portfolioInsightsRef} className="analysis-panel">
+          <div className="analysis-panel-head">
+            <h3>
+              {portfolioInsights.section === 'cluster'
+                ? 'Stock Comparison on Clustering'
+                : 'Stock Comparison on P/E Ratio'}
+            </h3>
+          </div>
+          {portfolioInsights.loading ? <p>Loading portfolio chart...</p> : null}
+          {portfolioInsights.error ? <p className="form-error">{portfolioInsights.error}</p> : null}
+          {!portfolioInsights.loading && portfolioInsights.section === 'pe' ? (
+            <>
+              {peBarChartData ? (
+                <div className="chart-wrap">
+                  <Bar
+                    data={peBarChartData}
+                    options={{
+                      responsive: true,
+                      maintainAspectRatio: false,
+                      plugins: { legend: { position: 'top' } },
+                    }}
+                  />
+                </div>
+              ) : (
+                <p className="muted">P/E ratio data is not available yet for the stocks in this portfolio.</p>
+              )}
+            </>
+          ) : null}
+          {!portfolioInsights.loading && portfolioInsights.section === 'cluster' ? (
+            <>
+              {portfolioInsights.payload?.clustering?.cluster_labels ? (
+                <ul className="cluster-legend">
+                  {Object.entries(portfolioInsights.payload.clustering.cluster_labels).map(([clusterId, clusterName]) => (
+                    <li key={clusterId}>
+                      <strong>Cluster {clusterId}:</strong> {clusterName}
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+              {clusterChartData ? (
+                <div className="chart-wrap">
+                  <Scatter
+                    data={clusterChartData}
+                    options={{
+                      responsive: true,
+                      maintainAspectRatio: false,
+                      plugins: {
+                        legend: { position: 'top' },
+                        tooltip: {
+                          callbacks: {
+                            label(context) {
+                              const point = context.raw || {}
+                              return `${point.symbol || ''} | PE ${point.x ?? '-'} | Discount ${point.y ?? '-'}`
+                            },
+                          },
+                        },
+                      },
+                      scales: {
+                        x: { title: { display: true, text: 'P/E Ratio' } },
+                        y: { title: { display: true, text: 'Discount Ratio (%)' } },
+                      },
+                    }}
+                  />
+                </div>
+              ) : (
+                <p className="muted">At least two stocks with usable live data are needed for portfolio clustering.</p>
+              )}
+            </>
           ) : null}
         </section>
       )}

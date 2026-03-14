@@ -3,9 +3,12 @@ import pandas as pd
 import yfinance as yf
 from django.conf import settings
 from django.core.cache import cache
+from portfolios.models import Portfolio
 from sklearn.cluster import KMeans
 from sklearn.linear_model import LinearRegression, LogisticRegression
 from sklearn.preprocessing import MinMaxScaler, StandardScaler
+from stocks.models import PortfolioStock
+from stocks.services import get_stock_snapshot
 
 GOLD_SYMBOL = 'GC=F'
 SILVER_SYMBOL = 'SI=F'
@@ -649,4 +652,119 @@ def _build_crypto_lstm_payload(frame: pd.DataFrame, symbol: str, horizon: str = 
         'actual_close': actual_recent + [None] * forecast_steps,
         'predicted_close': history_recent + future_predictions,
         'next_prediction': future_predictions[-1],
+    }
+
+
+def _portfolio_cluster_name(avg_pe: float, avg_discount: float, avg_range_position: float):
+    if avg_pe <= 18 and avg_discount > 0:
+        return 'Value Watch'
+    if avg_range_position >= 0.7:
+        return 'Momentum Leaders'
+    if avg_pe >= 28:
+        return 'Premium Growth'
+    return 'Balanced Core'
+
+
+def build_portfolio_analytics_payload(*, portfolio_id: int, user):
+    portfolio = Portfolio.objects.filter(id=portfolio_id, user=user).first()
+    if portfolio is None:
+        return None
+
+    holdings = list(
+        PortfolioStock.objects.filter(portfolio=portfolio)
+        .select_related('sector')
+        .order_by('-added_at')
+    )
+    if not holdings:
+        return {
+            'portfolio_id': portfolio.id,
+            'portfolio_name': portfolio.name,
+            'pe_comparison': [],
+            'clustering': {'points': [], 'cluster_labels': {}},
+        }
+
+    pe_rows = []
+    cluster_rows = []
+
+    for holding in holdings:
+        quote = get_stock_snapshot(holding.symbol)
+        pe_ratio = quote.get('pe_ratio')
+        last_value = quote.get('last_value')
+        discount_ratio = quote.get('discount_ratio')
+        high_365d = quote.get('high_365d')
+        low_365d = quote.get('low_365d')
+
+        pe_rows.append(
+            {
+                'symbol': holding.symbol,
+                'company_name': holding.company_name,
+                'sector': holding.sector.name,
+                'pe_ratio': pe_ratio,
+            }
+        )
+
+        if last_value is None:
+            continue
+
+        range_position = 0.5
+        if high_365d is not None and low_365d is not None and high_365d > low_365d:
+            range_position = (last_value - low_365d) / (high_365d - low_365d)
+
+        cluster_rows.append(
+            {
+                'symbol': holding.symbol,
+                'company_name': holding.company_name,
+                'sector': holding.sector.name,
+                'pe_ratio': float(pe_ratio) if pe_ratio is not None else 0.0,
+                'discount_ratio': float(discount_ratio) if discount_ratio is not None else 0.0,
+                'last_value': float(last_value),
+                'range_position': float(range_position),
+            }
+        )
+
+    if len(cluster_rows) >= 2:
+        frame = pd.DataFrame(cluster_rows)
+        features = frame[['pe_ratio', 'discount_ratio', 'range_position', 'last_value']]
+        scaled = StandardScaler().fit_transform(features)
+        cluster_count = min(3, len(frame))
+        labels = KMeans(n_clusters=cluster_count, random_state=42, n_init=10).fit_predict(scaled)
+        frame['cluster_id'] = labels
+
+        cluster_labels = {}
+        for cluster_id in sorted(frame['cluster_id'].unique()):
+            rows = frame[frame['cluster_id'] == cluster_id]
+            cluster_labels[int(cluster_id)] = _portfolio_cluster_name(
+                avg_pe=float(rows['pe_ratio'].mean()),
+                avg_discount=float(rows['discount_ratio'].mean()),
+                avg_range_position=float(rows['range_position'].mean()),
+            )
+
+        points = []
+        for row in frame.to_dict(orient='records'):
+            cluster_id = int(row['cluster_id'])
+            points.append(
+                {
+                    'symbol': row['symbol'],
+                    'company_name': row['company_name'],
+                    'sector': row['sector'],
+                    'x': round(float(row['pe_ratio']), 4),
+                    'y': round(float(row['discount_ratio']), 4),
+                    'last_value': round(float(row['last_value']), 2),
+                    'range_position': round(float(row['range_position']), 4),
+                    'cluster_id': cluster_id,
+                    'cluster_name': cluster_labels[cluster_id],
+                }
+            )
+    else:
+        points = []
+        cluster_labels = {}
+
+    return {
+        'portfolio_id': portfolio.id,
+        'portfolio_name': portfolio.name,
+        'pe_comparison': pe_rows,
+        'clustering': {
+            'points': points,
+            'cluster_labels': cluster_labels,
+        },
     }
